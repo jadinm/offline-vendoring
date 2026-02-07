@@ -1,0 +1,49 @@
+custom:
+  tasks:
+    - paths_to_package:
+        # Vscode extensions downloaded there using the following command at the root of the project:
+        # $ offvsix --destination vsix/ <extension-id>
+        vsix/: vsix/
+      install_command: code --install-extension
+      install_counts: EachFile
+git_mirrors:
+  mirrors:
+    # src is the source for "git clone --mirror"
+    # dst is the destination in the offline environment for "git push --mirror"
+    - src: https://github.com/jadinm/rust-templates
+      dst: https://private.domain/global/rust-templates
+
+    - src: https://github.com/jadinm/rust-pre-commit-hooks
+      dst: https://private.domain/global/rust-pre-commit-hooks
+
+    - src: https://github.com/pre-commit/pre-commit-hooks
+      dst: https://private.domain/global/pre-commit-hooks
+
+    - src: https://github.com/jackdewinter/pymarkdown
+      dst: https://private.domain/global/pymarkdown
+
+    - src: https://github.com/espressif/conventional-precommit-linter
+      dst: https://private.domain/global/conventional-precommit-linter
+
+    - src: https://github.com/doublify/pre-commit-rust
+      dst: https://private.domain/global/pre-commit-rust
+
+    - src: https://github.com/rustsec/advisory-db
+      dst: https://private.domain/global/advisory-db
+python:
+  requirement_files:
+    - ./pip/pre-commit.requirements.txt
+rust:
+  manifests:
+    - ./Cargo.toml
+  binaries:
+    - cargo-audit
+    - cargo-deny
+    - cargo-generate
+    - cargo-llvm-cov
+    - cargo-nextest
+    # For MCU
+    - probe-rs-tools
+  # Some environments might not have access to github.com or other places where rust tools are uploaded
+  # If set to false, a regular "cargo install" is run (much slower than "cargo binstall").
+  use_binstall: true
