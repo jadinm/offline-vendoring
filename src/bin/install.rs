@@ -25,6 +25,8 @@ struct Cli {
 enum CliError {
     #[error(transparent)]
     InstallingError(#[from] InstallingError),
+    #[error("Invalid archive path: {0}")]
+    InvalidArchivePath(String),
 }
 
 fn main() -> Result<(), CliError> {
@@ -33,6 +35,12 @@ fn main() -> Result<(), CliError> {
 
     let Cargo::OfflineInstall(cli) = Cargo::parse();
     debug!("Archive file: {}", cli.archive.display());
+    if !cli.archive.is_file() {
+        return Err(CliError::InvalidArchivePath(
+            cli.archive.display().to_string(),
+        ));
+    }
+
     install(cli.archive.as_path())?;
     Ok(())
 }

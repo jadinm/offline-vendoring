@@ -33,6 +33,8 @@ const MIRRORS_PATH: &str = "mirrors";
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Settings {
+    #[serde(default = "default_name")]
+    pub name: String,
     pub rust: RustSettings,
     pub python: PythonSettings,
     pub git_mirrors: GitMirrors,
@@ -40,6 +42,10 @@ pub struct Settings {
 }
 
 type ArchiveBuilder = Builder<GzEncoder<File>>;
+
+fn default_name() -> String {
+    "offline-vendoring".to_string()
+}
 
 /// Download and package external resources listed in the [`Settings`]
 ///
@@ -52,11 +58,12 @@ pub fn package(settings: &Settings) -> Result<(), PackagingError> {
 
 fn package_inner<T: CommandRunner>(settings: &Settings) -> Result<(), PackagingError> {
     // Create .tar.gz file
-    let tar_gz = File::create("archive.tar.gz").map_err(PackagingError::TarStart)?;
+    let tar_gz =
+        File::create(format!("{}.tar.gz", settings.name)).map_err(PackagingError::TarStart)?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
-    let packaging_directory = PathBuf::from("offline-vendoring");
+    let packaging_directory = PathBuf::from(settings.name.clone());
     if !packaging_directory.exists() {
         create_dir_all(packaging_directory.as_path()).map_err(PackagingError::DirectoryCreation)?;
     }
@@ -98,7 +105,8 @@ pub fn install(archive_path: &Path) -> Result<(), InstallingError> {
 }
 
 fn install_inner<T: CommandRunner>(archive_path: &Path) -> Result<(), InstallingError> {
-    let unpacked_directory = PathBuf::from("offline-vendoring");
+    #[expect(clippy::unwrap_used, reason = "CLI checks archive_path points a file")]
+    let unpacked_directory = PathBuf::from(archive_path.file_prefix().unwrap());
     if !unpacked_directory.exists() {
         create_dir_all(unpacked_directory.as_path()).map_err(InstallingError::DirectoryCreation)?;
     }
