@@ -18,13 +18,13 @@ use crate::{
 
 mod cmd;
 mod custom;
-mod error;
+mod errors;
 mod git;
 mod python;
 mod rust;
 
-pub use error::InstallingError;
-pub use error::PackagingError;
+pub use errors::InstallingError;
+pub use errors::PackagingError;
 
 const CARGO_TOOLS_PATH: &str = "cargo-tools";
 const CARGO_VENDOR_PATH: &str = "cargo-vendor";
