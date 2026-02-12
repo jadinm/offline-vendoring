@@ -222,10 +222,14 @@ fn install(
             // Create dummy tools
             let in_folder = tempdir().unwrap();
             if !tools.is_empty() {
-                create_dir_all(in_folder.path().join(CARGO_TOOLS_PATH)).unwrap();
+                create_dir_all(in_folder.path().join(CARGO_TOOLS_PATH).join("bin")).unwrap();
             }
             for tool in &tools {
-                let tool_path = in_folder.path().join(CARGO_TOOLS_PATH).join(tool);
+                let tool_path = in_folder
+                    .path()
+                    .join(CARGO_TOOLS_PATH)
+                    .join("bin")
+                    .join(tool);
                 info!("Creating file {}", tool_path.display());
                 File::create(tool_path).unwrap();
             }

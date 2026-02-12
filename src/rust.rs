@@ -114,7 +114,7 @@ impl RustSettings {
         )?;
 
         info!("Installing cargo tools");
-        let tools_in_folder = in_folder.join(CARGO_TOOLS_PATH);
+        let tools_in_folder = in_folder.join(CARGO_TOOLS_PATH).join("bin");
         if !tools_in_folder.exists() {
             info!("No cargo tool to install");
             return Ok(());
@@ -124,6 +124,18 @@ impl RustSettings {
         // Copy rust tools binary
         for src in tools_paths.filter_map(Result::ok) {
             info!("Installing {}", src.path().display());
+
+            // Only files, not directories are accepted as valid cargo tools
+            let file_type_res = src.file_type();
+            if let Ok(file_type) = file_type_res
+                && file_type.is_dir()
+            {
+                info!("Skipping folder {}", src.path().display());
+                continue;
+            } else if file_type_res.is_err() {
+                continue;
+            }
+
             let base_name = src.file_name().display().to_string();
             let dst_path = cargo_home.join("bin").join(base_name);
             copy(src.path(), dst_path).map_err(InstallingError::Copy)?;
