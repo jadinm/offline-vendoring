@@ -6,7 +6,7 @@ use std::{
 use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use tar::{Archive, Builder};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{
     cmd::{CommandRunner, LocalCommandRunner},
@@ -138,14 +138,31 @@ fn install_inner<T: CommandRunner>(archive_path: &Path) -> Result<(), Installing
 
     // Install resources
     info!("Installing external resources");
-    RustSettings::install(unpacked_directory.as_path())?;
-    PythonSettings::install::<T>(unpacked_directory.as_path())?;
-    settings
+    let mut latest_error: Result<(), _> = Ok(());
+    let res_rs = RustSettings::install(unpacked_directory.as_path());
+    if let Err(ref e) = res_rs {
+        error!("Failed to install rust deps: {e}");
+        latest_error = res_rs;
+    }
+    let res_py = PythonSettings::install::<T>(unpacked_directory.as_path());
+    if let Err(ref e) = res_py {
+        error!("Failed to install python deps: {e}");
+        latest_error = res_py;
+    }
+    let res_git = settings
         .git_mirrors
-        .install::<T>(unpacked_directory.as_path())?;
-    settings.custom.install::<T>(unpacked_directory.as_path())?;
+        .install::<T>(unpacked_directory.as_path());
+    if let Err(ref e) = res_git {
+        error!("Failed to install git deps: {e}");
+        latest_error = res_git;
+    }
+    let res = settings.custom.install::<T>(unpacked_directory.as_path());
+    if let Err(ref e) = res {
+        error!("Failed to install custom deps: {e}");
+        latest_error = res;
+    }
 
-    Ok(())
+    latest_error
 }
 
 #[cfg(test)]
