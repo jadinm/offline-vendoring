@@ -17,6 +17,8 @@ pub enum PackagingError {
     TarFinish(#[source] std::io::Error),
     #[error("Invalid UTF-8 character in {0}")]
     InvalidCharacter(Url),
+    #[error("Cannot get a valid output path from name: {0}")]
+    InvalidOutPath(#[source] std::io::Error),
 }
 
 #[derive(Error, Debug)]
@@ -47,4 +49,6 @@ pub enum InstallingError {
     CargoConfigWrite(#[source] std::io::Error),
     #[error("Invalid UTF-8 character in {0}")]
     InvalidCharacter(Url),
+    #[error("Cannot get a valid output path from name: {0}")]
+    InvalidOutPath(#[source] std::io::Error),
 }

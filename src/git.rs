@@ -60,6 +60,7 @@ impl GitMirrors {
         Ok(())
     }
 
+    /// `in_folder` needs to be a canonicalized path
     pub(crate) fn install<T: CommandRunner>(
         &self,
         in_folder: &Path,

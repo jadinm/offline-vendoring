@@ -67,6 +67,9 @@ fn package_inner<T: CommandRunner>(settings: &Settings) -> Result<(), PackagingE
     if !packaging_directory.exists() {
         create_dir_all(packaging_directory.as_path()).map_err(PackagingError::DirectoryCreation)?;
     }
+    let packaging_directory = packaging_directory
+        .canonicalize()
+        .map_err(PackagingError::InvalidOutPath)?;
 
     settings
         .rust
@@ -110,6 +113,9 @@ fn install_inner<T: CommandRunner>(archive_path: &Path) -> Result<(), Installing
     if !unpacked_directory.exists() {
         create_dir_all(unpacked_directory.as_path()).map_err(InstallingError::DirectoryCreation)?;
     }
+    let unpacked_directory = unpacked_directory
+        .canonicalize()
+        .map_err(InstallingError::InvalidOutPath)?;
 
     // Unpack archive .tar.gz
     let tar_gz = File::open(archive_path).map_err(InstallingError::TarUncompress)?;
@@ -118,13 +124,7 @@ fn install_inner<T: CommandRunner>(archive_path: &Path) -> Result<(), Installing
     archive
         .unpack(unpacked_directory.as_path())
         .map_err(InstallingError::TarUncompress)?;
-    #[expect(clippy::unwrap_used, reason = "Independent of user input")]
-    {
-        info!(
-            "Archive unpacked to {}",
-            unpacked_directory.canonicalize().unwrap().display()
-        );
-    }
+    info!("Archive unpacked to {}", unpacked_directory.display());
 
     // Get packaged settings
     let settings_path = unpacked_directory.join("settings");

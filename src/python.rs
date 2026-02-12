@@ -52,6 +52,7 @@ impl PythonSettings {
         Ok(())
     }
 
+    /// `in_folder` needs to be a canonicalized path
     pub(crate) fn install<T: CommandRunner>(in_folder: &Path) -> Result<(), InstallingError> {
         info!(
             "Configuring pip (user-level) to look at those wheel packages and never at the index"

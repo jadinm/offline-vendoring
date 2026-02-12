@@ -100,6 +100,7 @@ impl RustSettings {
         self.package_tools::<T>(out_folder, tar)
     }
 
+    /// `in_folder` needs to be a canonicalized path
     pub(crate) fn install(in_folder: &Path) -> Result<(), InstallingError> {
         info!("Instructions to configure cargo vendoring");
         let cargo_home = PathBuf::from(
