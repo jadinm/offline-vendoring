@@ -18,6 +18,7 @@ jobs:
 
       # Install cargo binaries (uses cargo binstall to go faster)
       - uses: taiki-e/install-action@cargo-audit
+      - uses: taiki-e/install-action@cargo-deny
 
       # pre-commit run
       - uses: actions/setup-python@v4
