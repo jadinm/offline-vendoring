@@ -70,17 +70,16 @@ impl RustSettings {
         fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
 
         let cmd = "cargo";
-        let mut args = vec![
-            if self.use_binstall {
-                "binstall".to_owned()
-            } else {
-                "install".to_owned()
-            },
-            "--disable-telemetry".to_owned(),
+        let mut args = if self.use_binstall {
+            vec!["binstall".to_owned(), "--disable-telemetry".to_owned()]
+        } else {
+            vec!["install".to_owned()]
+        };
+        args.extend([
             "--root".to_owned(),
             out_folder.display().to_string(),
             "--locked".to_owned(),
-        ];
+        ]);
         for binary in &self.binaries {
             args.push(binary.clone());
         }
