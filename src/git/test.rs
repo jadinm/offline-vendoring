@@ -29,7 +29,7 @@ mirrors: []
     .unwrap();
 
     let out_folder = tempdir().unwrap();
-    git.package::<LocalCommandRunner>(out_folder.path(), &mut archive)
+    git.package::<LocalCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail to package crates");
     archive.finish().expect("Shouldn't fail to build archive");
 }
@@ -49,7 +49,7 @@ mirrors:
     .unwrap();
 
     let out_folder = tempdir().unwrap();
-    git.package::<LocalCommandRunner>(out_folder.path(), &mut archive)
+    git.package::<LocalCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail to install mirrors");
     archive.finish().expect("Shouldn't fail to build archive");
 

@@ -11,8 +11,8 @@ use tracing::{debug, info};
 mod test;
 
 use crate::{
-    ArchiveBuilder, CARGO_TOOLS_PATH, CARGO_VENDOR_PATH, InstallingError, PackagingError,
-    cmd::CommandRunner,
+    ArchiveBuilder, CARGO_TOOLS_PATH, CARGO_VENDOR_PATH, InstallSkip, InstallingError,
+    PackagingError, cmd::CommandRunner,
 };
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -29,26 +29,31 @@ impl RustSettings {
         &self,
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
+        skip_download: bool,
     ) -> Result<(), PackagingError> {
         info!("Packaging rust crates");
         if self.manifests.is_empty() {
             debug!("No crate to package");
             return Ok(());
         }
-
-        let cmd = "cargo";
-        let mut args = vec![
-            "vendor".to_owned(),
-            "--versioned-dirs".to_owned(),
-            "--respect-source-config".to_owned(),
-        ];
-        for manifest in &self.manifests {
-            args.push("--sync".to_owned());
-            args.push(manifest.display().to_string());
-        }
         let out_folder = out_folder.join(CARGO_VENDOR_PATH);
-        args.push(out_folder.display().to_string());
-        T::run_cmd(cmd, &args, None)?;
+
+        if skip_download {
+            fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
+        } else {
+            let cmd = "cargo";
+            let mut args = vec![
+                "vendor".to_owned(),
+                "--versioned-dirs".to_owned(),
+                "--respect-source-config".to_owned(),
+            ];
+            for manifest in &self.manifests {
+                args.push("--sync".to_owned());
+                args.push(manifest.display().to_string());
+            }
+            args.push(out_folder.display().to_string());
+            T::run_cmd(cmd, &args, None)?;
+        }
         tar.append_dir_all(CARGO_VENDOR_PATH, out_folder)
             .map_err(PackagingError::TarAppend)?;
 
@@ -59,6 +64,7 @@ impl RustSettings {
         &self,
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
+        skip_download: bool,
     ) -> Result<(), PackagingError> {
         info!("Packaging cargo tools");
         if self.binaries.is_empty() {
@@ -69,21 +75,23 @@ impl RustSettings {
         let out_folder = out_folder.join(CARGO_TOOLS_PATH);
         fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
 
-        let cmd = "cargo";
-        let mut args = if self.use_binstall {
-            vec!["binstall".to_owned(), "--disable-telemetry".to_owned()]
-        } else {
-            vec!["install".to_owned()]
-        };
-        args.extend([
-            "--root".to_owned(),
-            out_folder.display().to_string(),
-            "--locked".to_owned(),
-        ]);
-        for binary in &self.binaries {
-            args.push(binary.clone());
+        if !skip_download {
+            let cmd = "cargo";
+            let mut args = if self.use_binstall {
+                vec!["binstall".to_owned(), "--disable-telemetry".to_owned()]
+            } else {
+                vec!["install".to_owned()]
+            };
+            args.extend([
+                "--root".to_owned(),
+                out_folder.display().to_string(),
+                "--locked".to_owned(),
+            ]);
+            for binary in &self.binaries {
+                args.push(binary.clone());
+            }
+            T::run_cmd(cmd, &args, None)?;
         }
-        T::run_cmd(cmd, &args, None)?;
         tar.append_dir_all(CARGO_TOOLS_PATH, out_folder)
             .map_err(PackagingError::TarAppend)?;
 
@@ -94,24 +102,43 @@ impl RustSettings {
         &self,
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
+        skip_download: bool,
     ) -> Result<(), PackagingError> {
-        self.package_crates::<T>(out_folder, tar)?;
-        self.package_tools::<T>(out_folder, tar)
+        self.package_crates::<T>(out_folder, tar, skip_download)?;
+        self.package_tools::<T>(out_folder, tar, skip_download)
     }
 
     /// `in_folder` needs to be a canonicalized path
-    pub(crate) fn install(in_folder: &Path) -> Result<(), InstallingError> {
-        info!("Instructions to configure cargo vendoring");
+    pub(crate) fn install(
+        in_folder: &Path,
+        rust_config_for: Option<&PathBuf>,
+        skip: &[InstallSkip],
+    ) -> Result<(), InstallingError> {
         let cargo_home = PathBuf::from(
             std::env::var("CARGO_HOME")
                 .or(std::env::var("HOME").map(|home| format!("{home}/.cargo")))
                 .map_err(InstallingError::NoCargoHome)?,
         );
-        info!("Update cargo config to use vendored resources");
-        Self::update_cargo_config(
-            &cargo_home.join("config.toml"),
-            &in_folder.join(CARGO_VENDOR_PATH),
-        )?;
+
+        // Potentially restrict the cargo configuration to a given path, instead of the whole user.
+        let config_folder = if let Some(rust_config_for) = rust_config_for {
+            let rust_config = rust_config_for.join(".cargo");
+            fs::create_dir_all(&rust_config).map_err(InstallingError::DirectoryCreation)?;
+            rust_config
+        } else {
+            cargo_home.clone()
+        };
+
+        if !skip.contains(&InstallSkip::RustConfig) {
+            info!("Update cargo config to use vendored resources");
+            Self::update_cargo_config(
+                &config_folder.join("config.toml"),
+                &in_folder.join(CARGO_VENDOR_PATH),
+            )?;
+        }
+        if skip.contains(&InstallSkip::RustTools) {
+            return Ok(());
+        }
 
         info!("Installing cargo tools");
         let tools_in_folder = in_folder.join(CARGO_TOOLS_PATH).join("bin");

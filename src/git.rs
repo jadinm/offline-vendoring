@@ -28,6 +28,7 @@ impl GitMirrors {
         &self,
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
+        skip_download: bool,
     ) -> Result<(), PackagingError> {
         info!("Packaging git mirrors");
         if self.mirrors.is_empty() {
@@ -37,23 +38,25 @@ impl GitMirrors {
         let out_folder = out_folder.join(MIRRORS_PATH);
         fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
 
-        for mirror in &self.mirrors {
-            let mirror_basename = PathBuf::from(mirror.src.path())
-                .file_name()
-                .and_then(|file_name| file_name.to_str())
-                .ok_or(PackagingError::InvalidCharacter(mirror.src.clone()))?
-                .to_owned();
+        if !skip_download {
+            for mirror in &self.mirrors {
+                let mirror_basename = PathBuf::from(mirror.src.path())
+                    .file_name()
+                    .and_then(|file_name| file_name.to_str())
+                    .ok_or(PackagingError::InvalidCharacter(mirror.src.clone()))?
+                    .to_owned();
 
-            T::run_cmd(
-                "git",
-                &[
-                    "clone".to_owned(),
-                    "--mirror".to_owned(),
-                    mirror.src.to_string(),
-                    out_folder.join(mirror_basename).display().to_string(),
-                ],
-                None,
-            )?;
+                T::run_cmd(
+                    "git",
+                    &[
+                        "clone".to_owned(),
+                        "--mirror".to_owned(),
+                        mirror.src.to_string(),
+                        out_folder.join(mirror_basename).display().to_string(),
+                    ],
+                    None,
+                )?;
+            }
         }
         tar.append_dir_all(MIRRORS_PATH, out_folder)
             .map_err(PackagingError::TarAppend)?;

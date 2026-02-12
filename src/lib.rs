@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use clap::ValueEnum;
 use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use tar::{Archive, Builder};
@@ -25,6 +26,7 @@ mod rust;
 
 pub use errors::InstallingError;
 pub use errors::PackagingError;
+pub use python::PythonConfigLevel;
 
 const CARGO_TOOLS_PATH: &str = "cargo-tools";
 const CARGO_VENDOR_PATH: &str = "cargo-vendor";
@@ -41,6 +43,30 @@ pub struct Settings {
     pub custom: CustomTasks,
 }
 
+#[derive(ValueEnum, Clone, Eq, Hash, PartialEq)]
+pub enum DownloadSkip {
+    /// Skip rust crate & tool downloading
+    Rust,
+    /// Skip python package downloading
+    Python,
+    /// Skip git mirror cloning
+    GitClone,
+}
+
+#[derive(ValueEnum, Clone, Eq, Hash, PartialEq)]
+pub enum InstallSkip {
+    /// Skip rust tools install
+    RustTools,
+    /// Skip rust configuration
+    RustConfig,
+    /// Skip python configuration
+    PythonConfig,
+    /// Skip git mirror pushes
+    GitPush,
+    /// Skip custom tasks
+    Custom,
+}
+
 type ArchiveBuilder = Builder<GzEncoder<File>>;
 
 fn default_name() -> String {
@@ -52,11 +78,14 @@ fn default_name() -> String {
 /// # Errors
 ///
 /// Check [`PackagingError`]
-pub fn package(settings: &Settings) -> Result<(), PackagingError> {
-    package_inner::<LocalCommandRunner>(settings)
+pub fn package(settings: &Settings, skip: &[DownloadSkip]) -> Result<(), PackagingError> {
+    package_inner::<LocalCommandRunner>(settings, skip)
 }
 
-fn package_inner<T: CommandRunner>(settings: &Settings) -> Result<(), PackagingError> {
+fn package_inner<T: CommandRunner>(
+    settings: &Settings,
+    skip: &[DownloadSkip],
+) -> Result<(), PackagingError> {
     // Create .tar.gz file
     let tar_gz =
         File::create(format!("{}.tar.gz", settings.name)).map_err(PackagingError::TarStart)?;
@@ -71,15 +100,21 @@ fn package_inner<T: CommandRunner>(settings: &Settings) -> Result<(), PackagingE
         .canonicalize()
         .map_err(PackagingError::InvalidOutPath)?;
 
-    settings
-        .rust
-        .package::<T>(packaging_directory.as_path(), &mut tar)?;
-    settings
-        .python
-        .package::<T>(packaging_directory.as_path(), &mut tar)?;
-    settings
-        .git_mirrors
-        .package::<T>(packaging_directory.as_path(), &mut tar)?;
+    settings.rust.package::<T>(
+        packaging_directory.as_path(),
+        &mut tar,
+        skip.contains(&DownloadSkip::Rust),
+    )?;
+    settings.python.package::<T>(
+        packaging_directory.as_path(),
+        &mut tar,
+        skip.contains(&DownloadSkip::Python),
+    )?;
+    settings.git_mirrors.package::<T>(
+        packaging_directory.as_path(),
+        &mut tar,
+        skip.contains(&DownloadSkip::GitClone),
+    )?;
     settings.custom.package(&mut tar)?;
 
     // Serialize settings at the root of the archive
@@ -103,11 +138,21 @@ fn package_inner<T: CommandRunner>(settings: &Settings) -> Result<(), PackagingE
 /// # Errors
 ///
 /// Check [`InstallingError`]
-pub fn install(archive_path: &Path) -> Result<(), InstallingError> {
-    install_inner::<LocalCommandRunner>(archive_path)
+pub fn install(
+    archive_path: &Path,
+    python_config_level: &PythonConfigLevel,
+    rust_config_for: Option<&PathBuf>,
+    skip: &[InstallSkip],
+) -> Result<(), InstallingError> {
+    install_inner::<LocalCommandRunner>(archive_path, python_config_level, rust_config_for, skip)
 }
 
-fn install_inner<T: CommandRunner>(archive_path: &Path) -> Result<(), InstallingError> {
+fn install_inner<T: CommandRunner>(
+    archive_path: &Path,
+    python_config_level: &PythonConfigLevel,
+    rust_config_for: Option<&PathBuf>,
+    skip: &[InstallSkip],
+) -> Result<(), InstallingError> {
     #[expect(clippy::unwrap_used, reason = "CLI checks archive_path points a file")]
     let unpacked_directory = PathBuf::from(archive_path.file_prefix().unwrap());
     if !unpacked_directory.exists() {
@@ -139,27 +184,34 @@ fn install_inner<T: CommandRunner>(archive_path: &Path) -> Result<(), Installing
     // Install resources
     info!("Installing external resources");
     let mut latest_error: Result<(), _> = Ok(());
-    let res_rs = RustSettings::install(unpacked_directory.as_path());
+    let res_rs = RustSettings::install(unpacked_directory.as_path(), rust_config_for, skip);
     if let Err(ref e) = res_rs {
         error!("Failed to install rust deps: {e}");
         latest_error = res_rs;
     }
-    let res_py = PythonSettings::install::<T>(unpacked_directory.as_path());
-    if let Err(ref e) = res_py {
-        error!("Failed to install python deps: {e}");
-        latest_error = res_py;
+    if skip.contains(&InstallSkip::PythonConfig) {
+        let res_py =
+            PythonSettings::install::<T>(unpacked_directory.as_path(), python_config_level);
+        if let Err(ref e) = res_py {
+            error!("Failed to install python deps: {e}");
+            latest_error = res_py;
+        }
     }
-    let res_git = settings
-        .git_mirrors
-        .install::<T>(unpacked_directory.as_path());
-    if let Err(ref e) = res_git {
-        error!("Failed to install git deps: {e}");
-        latest_error = res_git;
+    if skip.contains(&InstallSkip::GitPush) {
+        let res_git = settings
+            .git_mirrors
+            .install::<T>(unpacked_directory.as_path());
+        if let Err(ref e) = res_git {
+            error!("Failed to install git deps: {e}");
+            latest_error = res_git;
+        }
     }
-    let res = settings.custom.install::<T>(unpacked_directory.as_path());
-    if let Err(ref e) = res {
-        error!("Failed to install custom deps: {e}");
-        latest_error = res;
+    if skip.contains(&InstallSkip::Custom) {
+        let res = settings.custom.install::<T>(unpacked_directory.as_path());
+        if let Err(ref e) = res {
+            error!("Failed to install custom deps: {e}");
+            latest_error = res;
+        }
     }
 
     latest_error

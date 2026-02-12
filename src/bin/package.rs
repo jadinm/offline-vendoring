@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use offline_vendoring::{PackagingError, Settings, package};
+use offline_vendoring::{DownloadSkip, PackagingError, Settings, package};
 use thiserror::Error;
 use tracing::debug;
 
@@ -19,6 +19,9 @@ struct Cli {
     /// Path to config without the file extension (supported formats: JSON, TOML, YAML, INI, RON)
     /// E.g., "config/settings" instead of "config/settings.json"
     config: PathBuf,
+    /// Skip one or more downloading steps
+    #[clap(long, short, value_enum)]
+    skip_download: Vec<DownloadSkip>,
 }
 
 #[derive(Error, Debug)]
@@ -47,6 +50,6 @@ fn main() -> Result<(), CliError> {
         .map_err(|e| CliError::DeserializeConfig(e.to_string()))?;
     debug!("Got the following settings: {settings:#?}");
 
-    package(&settings)?;
+    package(&settings, &cli.skip_download)?;
     Ok(())
 }

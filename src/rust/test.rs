@@ -58,7 +58,7 @@ use_binstall: true
     )
     .unwrap();
 
-    rust.package_crates::<MockCommandRunner>(out_folder.path(), &mut archive)
+    rust.package_crates::<MockCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail to package crates");
     archive.finish().expect("Shouldn't fail to build archive");
 }
@@ -100,7 +100,7 @@ use_binstall: true
     )
     .unwrap();
 
-    rust.package_tools::<MockCommandRunner>(out_folder.path(), &mut archive)
+    rust.package_tools::<MockCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail to package tools");
     archive.finish().expect("Shouldn't fail to build archive");
 }
@@ -123,7 +123,7 @@ use_binstall: true
     .unwrap();
 
     let out_folder = tempdir().unwrap();
-    rust.package::<MockCommandRunner>(out_folder.path(), &mut archive)
+    rust.package::<MockCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail because there is no listed resources");
     archive.finish().expect("Shouldn't fail to build archive");
 }
@@ -235,7 +235,7 @@ fn install(
             }
 
             // Actual tested operation
-            RustSettings::install(in_folder.path()).expect("Installation failed");
+            RustSettings::install(in_folder.path(), None, &[]).expect("Installation failed");
 
             // Both OS have different way of quoting paths
             #[cfg(target_os = "linux")]

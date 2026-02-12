@@ -21,7 +21,7 @@ requirement_files: []
 
     let out_folder = tempdir().unwrap();
     python
-        .package::<LocalCommandRunner>(out_folder.path(), &mut archive)
+        .package::<LocalCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail because there is no listed resources");
     archive.finish().expect("Shouldn't fail to build archive");
 }
@@ -41,7 +41,7 @@ fn package_regular(mut archive: ArchiveBuilder) {
 
     let out_folder = tempdir().unwrap();
     python
-        .package::<LocalCommandRunner>(out_folder.path(), &mut archive)
+        .package::<LocalCommandRunner>(out_folder.path(), &mut archive, false)
         .expect("Shouldn't fail to package python resources");
     archive.finish().expect("Shouldn't fail to build archive");
 

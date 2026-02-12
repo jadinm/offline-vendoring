@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -18,11 +19,30 @@ pub struct PythonSettings {
     requirement_files: Vec<PathBuf>,
 }
 
+#[derive(Default, ValueEnum, Clone)]
+pub enum PythonConfigLevel {
+    /// Configure at user-level
+    #[default]
+    User,
+    /// Configure only for the current virtual environment
+    Site,
+}
+
+impl PythonConfigLevel {
+    fn pip_param(&self) -> &'static str {
+        match self {
+            Self::User => "--user",
+            Self::Site => "--site",
+        }
+    }
+}
+
 impl PythonSettings {
     pub(crate) fn package<T: CommandRunner>(
         &self,
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
+        skip_download: bool,
     ) -> Result<(), PackagingError> {
         info!("Packaging pip wheel packages");
         if self.requirement_files.is_empty() {
@@ -32,19 +52,21 @@ impl PythonSettings {
         let out_folder = out_folder.join(PIP_DOWNLOAD_DIR);
         fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
 
-        for requirement_file in &self.requirement_files {
-            let cmd = "pip";
-            T::run_cmd(
-                cmd,
-                &[
-                    "download".to_owned(),
-                    "-r".to_owned(),
-                    requirement_file.display().to_string(),
-                    "--dest".to_owned(),
-                    out_folder.display().to_string(),
-                ],
-                None,
-            )?;
+        if !skip_download {
+            for requirement_file in &self.requirement_files {
+                let cmd = "pip";
+                T::run_cmd(
+                    cmd,
+                    &[
+                        "download".to_owned(),
+                        "-r".to_owned(),
+                        requirement_file.display().to_string(),
+                        "--dest".to_owned(),
+                        out_folder.display().to_string(),
+                    ],
+                    None,
+                )?;
+            }
         }
         tar.append_dir_all(PIP_DOWNLOAD_DIR, out_folder)
             .map_err(PackagingError::TarAppend)?;
@@ -53,7 +75,10 @@ impl PythonSettings {
     }
 
     /// `in_folder` needs to be a canonicalized path
-    pub(crate) fn install<T: CommandRunner>(in_folder: &Path) -> Result<(), InstallingError> {
+    pub(crate) fn install<T: CommandRunner>(
+        in_folder: &Path,
+        python_config_level: &PythonConfigLevel,
+    ) -> Result<(), InstallingError> {
         info!(
             "Configuring pip (user-level) to look at those wheel packages and never at the index"
         );
@@ -63,7 +88,7 @@ impl PythonSettings {
             "pip",
             &[
                 "config".to_owned(),
-                "--user".to_owned(),
+                python_config_level.pip_param().to_owned(),
                 "set".to_owned(),
                 "global.find-links".to_owned(),
                 in_folder.display().to_string(),
