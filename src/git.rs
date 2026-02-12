@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs::{self, remove_dir_all},
     path::{Path, PathBuf},
 };
 
@@ -46,15 +46,21 @@ impl GitMirrors {
                     .ok_or(PackagingError::InvalidCharacter(mirror.src.clone()))?
                     .to_owned();
 
+                let mirror_clone_path = out_folder.join(&mirror_basename);
+                if mirror_clone_path.exists() && mirror_clone_path.is_dir() {
+                    remove_dir_all(&mirror_clone_path)
+                        .map_err(PackagingError::DirectoryCreation)?;
+                }
+
                 T::run_cmd(
                     "git",
                     &[
                         "clone".to_owned(),
                         "--mirror".to_owned(),
                         mirror.src.to_string(),
-                        out_folder.join(mirror_basename).display().to_string(),
+                        mirror_basename,
                     ],
-                    None,
+                    Some(out_folder.clone()),
                 )?;
             }
         }

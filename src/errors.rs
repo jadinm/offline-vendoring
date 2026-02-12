@@ -7,6 +7,8 @@ use crate::cmd::CommandFailedError;
 pub enum PackagingError {
     #[error("Failed to create output directory: {0}")]
     DirectoryCreation(#[source] std::io::Error),
+    #[error("Failed to clean up directory: {0}")]
+    DirectoryDeletion(#[source] std::io::Error),
     #[error(transparent)]
     CommandFailed(#[from] CommandFailedError),
     #[error("Creating archive failed: {0}")]
