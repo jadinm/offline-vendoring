@@ -53,4 +53,6 @@ pub enum InstallingError {
     InvalidCharacter(Url),
     #[error("Cannot get a valid output path from name: {0}")]
     InvalidOutPath(#[source] std::io::Error),
+    #[error("Cannot find archive file name prefix")]
+    InvalidArchivePath,
 }

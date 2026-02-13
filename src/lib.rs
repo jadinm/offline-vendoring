@@ -153,8 +153,17 @@ fn install_inner<T: CommandRunner>(
     rust_config_for: Option<&PathBuf>,
     skip: &[InstallSkip],
 ) -> Result<(), InstallingError> {
-    #[expect(clippy::unwrap_used, reason = "CLI checks archive_path points a file")]
-    let unpacked_directory = PathBuf::from(archive_path.file_prefix().unwrap());
+    // .file_prefix() isn't available until rust 1.91 and we wish to support rust 1.88 for now
+    let archive_base_name = archive_path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .ok_or(InstallingError::InvalidArchivePath)?;
+    let archive_prefix = archive_base_name
+        .split('.')
+        .next()
+        .ok_or(InstallingError::InvalidArchivePath)?;
+
+    let unpacked_directory = PathBuf::from(archive_prefix);
     if !unpacked_directory.exists() {
         create_dir_all(unpacked_directory.as_path()).map_err(InstallingError::DirectoryCreation)?;
     }
@@ -189,7 +198,7 @@ fn install_inner<T: CommandRunner>(
         error!("Failed to install rust deps: {e}");
         latest_error = res_rs;
     }
-    if skip.contains(&InstallSkip::PythonConfig) {
+    if !skip.contains(&InstallSkip::PythonConfig) {
         let res_py =
             PythonSettings::install::<T>(unpacked_directory.as_path(), python_config_level);
         if let Err(ref e) = res_py {
@@ -197,7 +206,7 @@ fn install_inner<T: CommandRunner>(
             latest_error = res_py;
         }
     }
-    if skip.contains(&InstallSkip::GitPush) {
+    if !skip.contains(&InstallSkip::GitPush) {
         let res_git = settings
             .git_mirrors
             .install::<T>(unpacked_directory.as_path());
@@ -206,7 +215,7 @@ fn install_inner<T: CommandRunner>(
             latest_error = res_git;
         }
     }
-    if skip.contains(&InstallSkip::Custom) {
+    if !skip.contains(&InstallSkip::Custom) {
         let res = settings.custom.install::<T>(unpacked_directory.as_path());
         if let Err(ref e) = res {
             error!("Failed to install custom deps: {e}");

@@ -3,7 +3,7 @@ authors = ["Mathieu Jadin <mathjadin@gmail.com>"]
 edition = "2024"
 license = "MIT"
 name = "cargo_offline_vendoring"
-version = "0.1.0"
+version = "0.1.1"
 description = "package and install different external resources for offline install in air-gaped environments"
 repository = "https://github.com/jadinm/offline-vendoring"
 categories = [
@@ -17,6 +17,7 @@ keywords = [
     "vendoring",
     "offline",
 ]
+rust-version = "1.88"
 
 [dependencies]
 clap = {version = "4", features = ["derive"]}
