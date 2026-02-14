@@ -12,9 +12,6 @@ git_mirrors:
   mirrors:
     # src is the source for "git clone --mirror"
     # dst is the destination in the offline environment for "git push --mirror"
-    - src: https://github.com/jadinm/rust-templates
-      dst: https://private.domain/global/rust-templates
-
     - src: https://github.com/jadinm/rust-pre-commit-hooks
       dst: https://private.domain/global/rust-pre-commit-hooks
 
