@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
-use crate::{ArchiveBuilder, InstallingError, PackagingError, cmd::CommandRunner};
+use crate::{ArchiveBuilder, cmd::CommandRunner, custom::errors::CustomError};
 
+pub mod errors;
 #[cfg(test)]
 mod test;
 
@@ -44,18 +45,27 @@ pub enum CustomInstallInstallCount {
 }
 
 impl CustomTasks {
-    pub(crate) fn package(&self, tar: &mut ArchiveBuilder) -> Result<(), PackagingError> {
+    pub(crate) fn package(&self, tar: &mut ArchiveBuilder) -> Result<(), CustomError> {
         info!("Packaging custom tasks");
         for task in &self.tasks {
             debug!("Processing {:#?}", task);
             for (local_path, package_path) in &task.paths_to_package {
                 debug!("Processing {}", local_path.display());
                 if local_path.is_dir() {
-                    tar.append_dir_all(package_path, local_path)
-                        .map_err(PackagingError::TarAppend)?;
+                    tar.append_dir_all(package_path, local_path).map_err(|e| {
+                        CustomError::Archive {
+                            src: local_path.clone(),
+                            dst: package_path.clone(),
+                            source: e,
+                        }
+                    })?;
                 } else {
                     tar.append_path_with_name(local_path, package_path)
-                        .map_err(PackagingError::TarAppend)?;
+                        .map_err(|e| CustomError::Archive {
+                            src: local_path.clone(),
+                            dst: package_path.clone(),
+                            source: e,
+                        })?;
                 }
             }
         }
@@ -64,10 +74,7 @@ impl CustomTasks {
     }
 
     /// `in_folder` needs to be a canonicalized path
-    pub(crate) fn install<T: CommandRunner>(
-        &self,
-        in_folder: &Path,
-    ) -> Result<(), InstallingError> {
+    pub(crate) fn install<T: CommandRunner>(&self, in_folder: &Path) -> Result<(), CustomError> {
         info!("Installing through custom tasks");
         for task in &self.tasks {
             if task.install_command.is_none() {
@@ -75,9 +82,8 @@ impl CustomTasks {
             }
             #[expect(clippy::unwrap_used, reason = "already checked")]
             let install_command = task.install_command.as_ref().unwrap();
-            let install_command = shlex::split(install_command).ok_or(
-                InstallingError::CustomInstallCommand(install_command.clone()),
-            )?;
+            let install_command = shlex::split(install_command)
+                .ok_or(CustomError::CommandUnparsable(install_command.clone()))?;
             if install_command.is_empty() {
                 warn!("Empty string command in task '{task:#?}'");
                 continue;
@@ -101,7 +107,9 @@ impl CustomTasks {
                         // Recursively look over every file in listed folders
                         if package_path.is_dir() {
                             for entry in WalkDir::new(&package_path) {
-                                let entry = entry.map_err(InstallingError::WalkDirectory)?;
+                                let entry = entry.map_err(|e| {
+                                    CustomError::WalkDirectory(package_path.clone(), e)
+                                })?;
                                 if entry.path().is_file() {
                                     Self::run_command_with_path::<T>(
                                         &install_command,
@@ -136,7 +144,7 @@ impl CustomTasks {
         install_command: &[String],
         extra_arg_path: &Path,
         cwd: PathBuf,
-    ) -> Result<(), InstallingError> {
+    ) -> Result<(), CustomError> {
         let mut args_with_path = install_command.to_vec();
         args_with_path.push(extra_arg_path.display().to_string());
         #[expect(clippy::indexing_slicing, reason = "checked after shlex.split()")]

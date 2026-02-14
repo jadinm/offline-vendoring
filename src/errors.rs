@@ -1,58 +1,52 @@
-use thiserror::Error;
-use url::Url;
+use std::path::PathBuf;
 
-use crate::cmd::CommandFailedError;
+use thiserror::Error;
+
+use crate::{
+    custom::errors::CustomError, git::errors::GitError, python::errors::PythonError,
+    rust::errors::RustError,
+};
 
 #[derive(Error, Debug)]
 pub enum PackagingError {
-    #[error("Failed to create output directory: {0}")]
-    DirectoryCreation(#[source] std::io::Error),
-    #[error("Failed to clean up directory: {0}")]
-    DirectoryDeletion(#[source] std::io::Error),
-    #[error(transparent)]
-    CommandFailed(#[from] CommandFailedError),
-    #[error("Creating archive failed: {0}")]
-    TarStart(#[source] std::io::Error),
-    #[error("Append folder to archive failed: {0}")]
-    TarAppend(#[source] std::io::Error),
-    #[error("Finalizing archive failed: {0}")]
-    TarFinish(#[source] std::io::Error),
-    #[error("Invalid UTF-8 character in {0}")]
-    InvalidCharacter(Url),
-    #[error("Cannot get a valid output path from name: {0}")]
-    InvalidOutPath(#[source] std::io::Error),
+    #[error("Failed to create archive: {0}")]
+    ArchiveCreation(#[source] std::io::Error),
+    #[error("Failed to insert settings into the archive: {0}")]
+    ArchiveInsert(#[source] std::io::Error),
+    #[error("Cannot create intermediate output directory at '{0}': {1}")]
+    CreateMainDirectory(PathBuf, #[source] std::io::Error),
+    #[error("Cannot get the absolute path for the intermediate output directory '{0}': {1}")]
+    GetCannonMainDirectory(PathBuf, #[source] std::io::Error),
+    #[error("Custom tasks: {0}")]
+    Custom(#[from] CustomError),
+    #[error("Git: {0}")]
+    Git(#[from] GitError),
+    #[error("Python: {0}")]
+    Python(#[from] PythonError),
+    #[error("Rust: {0}")]
+    Rust(#[from] RustError),
 }
 
 #[derive(Error, Debug)]
 pub enum InstallingError {
+    #[error("Cannot find archive file name prefix in {0}")]
+    InvalidArchivePath(PathBuf),
+    #[error("Cannot create output directory at '{0}': {1}")]
+    CreateMainDirectory(PathBuf, #[source] std::io::Error),
+    #[error("Cannot get the absolute path for the output directory '{0}': {1}")]
+    GetCannonMainDirectory(PathBuf, #[source] std::io::Error),
     #[error("Invalid config: {0}")]
     Config(#[from] config::ConfigError),
     #[error("Cannot deserialize config: {0}")]
     DeserializeConfig(String),
-    #[error("Failed to create output directory: {0}")]
-    DirectoryCreation(#[source] std::io::Error),
-    #[error("Uncompress archive failed: {0}")]
-    TarUncompress(#[source] std::io::Error),
-    #[error(transparent)]
-    CommandFailed(#[from] CommandFailedError),
-    #[error("Failed to read directory: {0}")]
-    ReadDirectory(#[source] std::io::Error),
-    #[error("Failed to recursively read the directory: {0}")]
-    WalkDirectory(#[from] walkdir::Error),
-    #[error("Failed to copy file: {0}")]
-    Copy(#[source] std::io::Error),
-    #[error("Invalid custom install command: {0}")]
-    CustomInstallCommand(String),
-    #[error("Failed to find cargo home: {0}")]
-    NoCargoHome(#[source] std::env::VarError),
-    #[error("Failed to read cargo config: {0}")]
-    CargoConfigRead(#[source] toml_edit::TomlError),
-    #[error("Failed to write cargo config: {0}")]
-    CargoConfigWrite(#[source] std::io::Error),
-    #[error("Invalid UTF-8 character in {0}")]
-    InvalidCharacter(Url),
-    #[error("Cannot get a valid output path from name: {0}")]
-    InvalidOutPath(#[source] std::io::Error),
-    #[error("Cannot find archive file name prefix")]
-    InvalidArchivePath,
+    #[error("Open & uncompress archive failed: {0}")]
+    ArchiveUncompress(#[source] std::io::Error),
+    #[error("Custom tasks: {0}")]
+    Custom(#[from] CustomError),
+    #[error("Git: {0}")]
+    Git(#[from] GitError),
+    #[error("Python: {0}")]
+    Python(#[from] PythonError),
+    #[error("Rust: {0}")]
+    Rust(#[from] RustError),
 }

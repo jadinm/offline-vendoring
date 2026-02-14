@@ -36,7 +36,7 @@ struct Cli {
 /// Errors exposed to the CLI user
 enum CliError {
     #[error(transparent)]
-    InstallingError(#[from] InstallingError),
+    InstallingError(#[from] Box<InstallingError>),
     #[error("Invalid archive path: {0}")]
     InvalidArchivePath(String),
 }

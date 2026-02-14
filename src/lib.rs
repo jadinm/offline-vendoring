@@ -78,8 +78,8 @@ fn default_name() -> String {
 /// # Errors
 ///
 /// Check [`PackagingError`]
-pub fn package(settings: &Settings, skip: &[DownloadSkip]) -> Result<(), PackagingError> {
-    package_inner::<LocalCommandRunner>(settings, skip)
+pub fn package(settings: &Settings, skip: &[DownloadSkip]) -> Result<(), Box<PackagingError>> {
+    package_inner::<LocalCommandRunner>(settings, skip).map_err(Box::new)
 }
 
 fn package_inner<T: CommandRunner>(
@@ -87,18 +87,19 @@ fn package_inner<T: CommandRunner>(
     skip: &[DownloadSkip],
 ) -> Result<(), PackagingError> {
     // Create .tar.gz file
-    let tar_gz =
-        File::create(format!("{}.tar.gz", settings.name)).map_err(PackagingError::TarStart)?;
+    let tar_gz = File::create(format!("{}.tar.gz", settings.name))
+        .map_err(PackagingError::ArchiveCreation)?;
     let enc = GzEncoder::new(tar_gz, Compression::default());
     let mut tar = tar::Builder::new(enc);
 
     let packaging_directory = PathBuf::from(settings.name.clone());
     if !packaging_directory.exists() {
-        create_dir_all(packaging_directory.as_path()).map_err(PackagingError::DirectoryCreation)?;
+        create_dir_all(packaging_directory.as_path())
+            .map_err(|e| PackagingError::CreateMainDirectory(packaging_directory.clone(), e))?;
     }
     let packaging_directory = packaging_directory
         .canonicalize()
-        .map_err(PackagingError::InvalidOutPath)?;
+        .map_err(|e| PackagingError::GetCannonMainDirectory(packaging_directory.clone(), e))?;
 
     settings.rust.package::<T>(
         packaging_directory.as_path(),
@@ -125,10 +126,10 @@ fn package_inner<T: CommandRunner>(
         let settings_file = File::create_new(&settings_file_path).unwrap();
         serde_yaml::to_writer(settings_file, settings).unwrap();
         tar.append_path_with_name(settings_file_path, "settings.yaml")
-            .map_err(PackagingError::TarAppend)?;
+            .map_err(PackagingError::ArchiveInsert)?;
     }
 
-    tar.finish().map_err(PackagingError::TarFinish)?;
+    tar.finish().map_err(PackagingError::ArchiveCreation)?;
 
     Ok(())
 }
@@ -143,8 +144,9 @@ pub fn install(
     python_config_level: &PythonConfigLevel,
     rust_config_for: Option<&PathBuf>,
     skip: &[InstallSkip],
-) -> Result<(), InstallingError> {
+) -> Result<(), Box<InstallingError>> {
     install_inner::<LocalCommandRunner>(archive_path, python_config_level, rust_config_for, skip)
+        .map_err(Box::new)
 }
 
 fn install_inner<T: CommandRunner>(
@@ -157,27 +159,33 @@ fn install_inner<T: CommandRunner>(
     let archive_base_name = archive_path
         .file_name()
         .map(|name| name.to_string_lossy())
-        .ok_or(InstallingError::InvalidArchivePath)?;
-    let archive_prefix = archive_base_name
-        .split('.')
-        .next()
-        .ok_or(InstallingError::InvalidArchivePath)?;
+        .ok_or(InstallingError::InvalidArchivePath(
+            archive_path.to_path_buf(),
+        ))?;
+    let archive_prefix =
+        archive_base_name
+            .split('.')
+            .next()
+            .ok_or(InstallingError::InvalidArchivePath(
+                archive_path.to_path_buf(),
+            ))?;
 
     let unpacked_directory = PathBuf::from(archive_prefix);
     if !unpacked_directory.exists() {
-        create_dir_all(unpacked_directory.as_path()).map_err(InstallingError::DirectoryCreation)?;
+        create_dir_all(unpacked_directory.as_path())
+            .map_err(|e| InstallingError::CreateMainDirectory(unpacked_directory.clone(), e))?;
     }
     let unpacked_directory = unpacked_directory
         .canonicalize()
-        .map_err(InstallingError::InvalidOutPath)?;
+        .map_err(|e| InstallingError::GetCannonMainDirectory(unpacked_directory.clone(), e))?;
 
     // Unpack archive .tar.gz
-    let tar_gz = File::open(archive_path).map_err(InstallingError::TarUncompress)?;
+    let tar_gz = File::open(archive_path).map_err(InstallingError::ArchiveUncompress)?;
     let tar = GzDecoder::new(tar_gz);
     let mut archive = Archive::new(tar);
     archive
         .unpack(unpacked_directory.as_path())
-        .map_err(InstallingError::TarUncompress)?;
+        .map_err(InstallingError::ArchiveUncompress)?;
     info!("Archive unpacked to {}", unpacked_directory.display());
 
     // Get packaged settings
@@ -194,32 +202,32 @@ fn install_inner<T: CommandRunner>(
     info!("Installing external resources");
     let mut latest_error: Result<(), _> = Ok(());
     let res_rs = RustSettings::install(unpacked_directory.as_path(), rust_config_for, skip);
-    if let Err(ref e) = res_rs {
-        error!("Failed to install rust deps: {e}");
-        latest_error = res_rs;
+    if let Err(ref err) = res_rs {
+        error!("Failed to install rust deps: {err}");
+        latest_error = res_rs.map_err(InstallingError::Rust);
     }
     if !skip.contains(&InstallSkip::PythonConfig) {
         let res_py =
             PythonSettings::install::<T>(unpacked_directory.as_path(), python_config_level);
-        if let Err(ref e) = res_py {
-            error!("Failed to install python deps: {e}");
-            latest_error = res_py;
+        if let Err(ref err) = res_py {
+            error!("Failed to install python deps: {err}");
+            latest_error = res_py.map_err(InstallingError::Python);
         }
     }
     if !skip.contains(&InstallSkip::GitPush) {
         let res_git = settings
             .git_mirrors
             .install::<T>(unpacked_directory.as_path());
-        if let Err(ref e) = res_git {
-            error!("Failed to install git deps: {e}");
-            latest_error = res_git;
+        if let Err(ref err) = res_git {
+            error!("Failed to install git deps: {err}");
+            latest_error = res_git.map_err(InstallingError::Git);
         }
     }
     if !skip.contains(&InstallSkip::Custom) {
         let res = settings.custom.install::<T>(unpacked_directory.as_path());
-        if let Err(ref e) = res {
-            error!("Failed to install custom deps: {e}");
-            latest_error = res;
+        if let Err(ref err) = res {
+            error!("Failed to install custom deps: {err}");
+            latest_error = res.map_err(InstallingError::Custom);
         }
     }
 

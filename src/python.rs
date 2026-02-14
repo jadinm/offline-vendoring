@@ -7,10 +7,9 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-use crate::{
-    ArchiveBuilder, InstallingError, PIP_DOWNLOAD_DIR, PackagingError, cmd::CommandRunner,
-};
+use crate::{ArchiveBuilder, PIP_DOWNLOAD_DIR, cmd::CommandRunner, python::errors::PythonError};
 
+pub mod errors;
 #[cfg(test)]
 mod test;
 
@@ -43,14 +42,15 @@ impl PythonSettings {
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
         skip_download: bool,
-    ) -> Result<(), PackagingError> {
+    ) -> Result<(), PythonError> {
         info!("Packaging pip wheel packages");
         if self.requirement_files.is_empty() {
             debug!("No python package");
             return Ok(());
         }
         let out_folder = out_folder.join(PIP_DOWNLOAD_DIR);
-        fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
+        fs::create_dir_all(&out_folder)
+            .map_err(|e| PythonError::CreateMainDirectory(out_folder.clone(), e))?;
 
         if !skip_download {
             for requirement_file in &self.requirement_files {
@@ -68,8 +68,12 @@ impl PythonSettings {
                 )?;
             }
         }
-        tar.append_dir_all(PIP_DOWNLOAD_DIR, out_folder)
-            .map_err(PackagingError::TarAppend)?;
+        tar.append_dir_all(PIP_DOWNLOAD_DIR, &out_folder)
+            .map_err(|e| PythonError::Archive {
+                src: out_folder,
+                dst: PIP_DOWNLOAD_DIR.to_owned(),
+                source: e,
+            })?;
 
         Ok(())
     }
@@ -78,7 +82,7 @@ impl PythonSettings {
     pub(crate) fn install<T: CommandRunner>(
         in_folder: &Path,
         python_config_level: &PythonConfigLevel,
-    ) -> Result<(), InstallingError> {
+    ) -> Result<(), PythonError> {
         info!(
             "Configuring pip (user-level) to look at those wheel packages and never at the index"
         );

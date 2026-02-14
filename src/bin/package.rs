@@ -32,7 +32,7 @@ enum CliError {
     #[error("Cannot deserialize config: {0}")]
     DeserializeConfig(String),
     #[error(transparent)]
-    PackagingError(#[from] PackagingError),
+    PackagingError(#[from] Box<PackagingError>),
 }
 
 fn main() -> Result<(), CliError> {

@@ -7,12 +7,14 @@ use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table, value};
 use tracing::{debug, info};
 
+pub mod errors;
 #[cfg(test)]
 mod test;
 
 use crate::{
-    ArchiveBuilder, CARGO_TOOLS_PATH, CARGO_VENDOR_PATH, InstallSkip, InstallingError,
-    PackagingError, cmd::CommandRunner,
+    ArchiveBuilder, CARGO_TOOLS_PATH, CARGO_VENDOR_PATH, InstallSkip,
+    cmd::CommandRunner,
+    rust::errors::{CargoHomeError, RustError},
 };
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -30,7 +32,7 @@ impl RustSettings {
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
         skip_download: bool,
-    ) -> Result<(), PackagingError> {
+    ) -> Result<(), RustError> {
         info!("Packaging rust crates");
         if self.manifests.is_empty() {
             debug!("No crate to package");
@@ -39,7 +41,8 @@ impl RustSettings {
         let out_folder = out_folder.join(CARGO_VENDOR_PATH);
 
         if skip_download {
-            fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
+            fs::create_dir_all(&out_folder)
+                .map_err(|e| RustError::CreateMainDirectory(out_folder.clone(), e))?;
         } else {
             let cmd = "cargo";
             let mut args = vec![
@@ -54,8 +57,12 @@ impl RustSettings {
             args.push(out_folder.display().to_string());
             T::run_cmd(cmd, &args, None)?;
         }
-        tar.append_dir_all(CARGO_VENDOR_PATH, out_folder)
-            .map_err(PackagingError::TarAppend)?;
+        tar.append_dir_all(CARGO_VENDOR_PATH, &out_folder)
+            .map_err(|e| RustError::Archive {
+                src: out_folder,
+                dst: CARGO_VENDOR_PATH.to_owned(),
+                source: e,
+            })?;
 
         Ok(())
     }
@@ -65,7 +72,7 @@ impl RustSettings {
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
         skip_download: bool,
-    ) -> Result<(), PackagingError> {
+    ) -> Result<(), RustError> {
         info!("Packaging cargo tools");
         if self.binaries.is_empty() {
             debug!("No cargo tool to package");
@@ -73,7 +80,8 @@ impl RustSettings {
         }
 
         let out_folder = out_folder.join(CARGO_TOOLS_PATH);
-        fs::create_dir_all(&out_folder).map_err(PackagingError::DirectoryCreation)?;
+        fs::create_dir_all(&out_folder)
+            .map_err(|e| RustError::CreateMainDirectory(out_folder.clone(), e))?;
 
         if !skip_download {
             let cmd = "cargo";
@@ -92,8 +100,12 @@ impl RustSettings {
             }
             T::run_cmd(cmd, &args, None)?;
         }
-        tar.append_dir_all(CARGO_TOOLS_PATH, out_folder)
-            .map_err(PackagingError::TarAppend)?;
+        tar.append_dir_all(CARGO_TOOLS_PATH, &out_folder)
+            .map_err(|e| RustError::Archive {
+                src: out_folder,
+                dst: CARGO_TOOLS_PATH.to_owned(),
+                source: e,
+            })?;
 
         Ok(())
     }
@@ -103,7 +115,7 @@ impl RustSettings {
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
         skip_download: bool,
-    ) -> Result<(), PackagingError> {
+    ) -> Result<(), RustError> {
         self.package_crates::<T>(out_folder, tar, skip_download)?;
         self.package_tools::<T>(out_folder, tar, skip_download)
     }
@@ -113,17 +125,18 @@ impl RustSettings {
         in_folder: &Path,
         rust_config_for: Option<&PathBuf>,
         skip: &[InstallSkip],
-    ) -> Result<(), InstallingError> {
+    ) -> Result<(), RustError> {
         let cargo_home = PathBuf::from(
             std::env::var("CARGO_HOME")
                 .or(std::env::var("HOME").map(|home| format!("{home}/.cargo")))
-                .map_err(InstallingError::NoCargoHome)?,
+                .map_err(CargoHomeError::NoCargoHome)?,
         );
 
         // Potentially restrict the cargo configuration to a given path, instead of the whole user.
         let config_folder = if let Some(rust_config_for) = rust_config_for {
             let rust_config = rust_config_for.join(".cargo");
-            fs::create_dir_all(&rust_config).map_err(InstallingError::DirectoryCreation)?;
+            fs::create_dir_all(&rust_config)
+                .map_err(|e| RustError::CreateMainDirectory(rust_config.clone(), e))?;
             rust_config
         } else {
             cargo_home.clone()
@@ -147,7 +160,8 @@ impl RustSettings {
             return Ok(());
         }
 
-        let tools_paths = fs::read_dir(tools_in_folder).map_err(InstallingError::ReadDirectory)?;
+        let tools_paths = fs::read_dir(&tools_in_folder)
+            .map_err(|e| CargoHomeError::ReadToolsDirectory(tools_in_folder, e))?;
         // Copy rust tools binary
         for src in tools_paths.filter_map(Result::ok) {
             info!("Installing {}", src.path().display());
@@ -165,7 +179,8 @@ impl RustSettings {
 
             let base_name = src.file_name().display().to_string();
             let dst_path = cargo_home.join("bin").join(base_name);
-            copy(src.path(), dst_path).map_err(InstallingError::Copy)?;
+            copy(src.path(), &dst_path)
+                .map_err(|e| CargoHomeError::ImportTool(src.path(), dst_path, e))?;
         }
         Ok(())
     }
@@ -174,14 +189,11 @@ impl RustSettings {
         clippy::indexing_slicing,
         reason = "false positive: toml_edit creates a value if the key doesn't exists"
     )]
-    fn update_cargo_config(
-        cargo_config: &Path,
-        vendored_path: &Path,
-    ) -> Result<(), InstallingError> {
+    fn update_cargo_config(cargo_config: &Path, vendored_path: &Path) -> Result<(), RustError> {
         let content = fs::read_to_string(cargo_config).unwrap_or_default();
         let mut doc = content
             .parse::<DocumentMut>()
-            .map_err(InstallingError::CargoConfigRead)?;
+            .map_err(|e| CargoHomeError::CargoConfigRead(cargo_config.to_path_buf(), e))?;
         let source = doc["source"].or_insert(Item::Table(Table::new()));
 
         source["crates-io"]["replace-with"] = value("vendored-sources");
@@ -190,7 +202,8 @@ impl RustSettings {
             "New config for ${{CARGO_HOME}}/config.toml: {}",
             doc.to_string()
         );
-        fs::write(cargo_config, doc.to_string()).map_err(InstallingError::CargoConfigWrite)?;
+        fs::write(cargo_config, doc.to_string())
+            .map_err(|e| CargoHomeError::CargoConfigWrite(cargo_config.to_path_buf(), e))?;
         Ok(())
     }
 }
