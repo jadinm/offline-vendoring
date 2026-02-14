@@ -19,6 +19,7 @@ jobs:
       # Install cargo binaries (uses cargo binstall to go faster)
       - uses: taiki-e/install-action@cargo-audit
       - uses: taiki-e/install-action@cargo-deny
+      - uses: taiki-e/install-action@cargo-binstall
 
       # pre-commit run
       - uses: actions/setup-python@v4
@@ -31,3 +32,12 @@ jobs:
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
+
+      # Run program on self
+      - name: Test offline-package on self
+        run: cargo run --bin cargo-offline-package offline-package example_settings
+      - name: Test offline-install on self (skipping custom & git steps)
+        run: |
+          mkdir tmp
+          cd tmp
+          cargo run --manifest-path ../Cargo.toml --bin cargo-offline-install -- offline-install --skip git-push --skip custom ../offline-vendoring.tar.gz
