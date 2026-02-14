@@ -86,7 +86,11 @@ impl RustSettings {
         if !skip_download {
             let cmd = "cargo";
             let mut args = if self.use_binstall {
-                vec!["binstall".to_owned(), "--disable-telemetry".to_owned()]
+                vec![
+                    "binstall".to_owned(),
+                    "--disable-telemetry".to_owned(),
+                    "--no-confirm".to_owned(),
+                ]
             } else {
                 vec!["install".to_owned()]
             };
