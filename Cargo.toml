@@ -132,5 +132,10 @@ unseparated_literal_suffix = "warn"
 unwrap_used = "warn"
 verbose_file_reads = "warn"
 
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 # For MCU development, consider the following lint
 # float_arithmetic = "warn"
