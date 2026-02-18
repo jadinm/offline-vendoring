@@ -19,7 +19,7 @@ repos:
       - id: pymarkdown
         args:
           - -d
-          - no-multiple-blanks,line-length
+          - no-multiple-blanks,line-length,no-duplicate-header
           - scan
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.3.0
