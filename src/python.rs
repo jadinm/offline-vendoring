@@ -104,7 +104,7 @@ impl PythonSettings {
             "pip",
             &[
                 "config".to_owned(),
-                "--user".to_owned(),
+                python_config_level.pip_param().to_owned(),
                 "set".to_owned(),
                 "global.no-index".to_owned(),
                 "true".to_owned(),
