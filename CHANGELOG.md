@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Relative paths to cargo manifests when there is a rust workspace in the current directory (#5)
 
+### Added
+
+- Rust crates to compile std & co for the current toolchain. (#5)
+  This is required for rust-analyzer to parse std symbols such as "String".
+  Perhaps in the future, cargo vendor will perform this task for us but,
+  for now, it needs to be manual.
+
 ## [1.0.1] - 2019-02-18
 
 ### Fixed

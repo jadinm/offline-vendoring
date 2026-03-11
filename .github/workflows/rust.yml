@@ -27,6 +27,12 @@ jobs:
           python-version: 3.x
       - uses: pre-commit/action@v3.0.1
 
+      # Install rustup requirements
+      - name: install rust-src
+        run: rustup component add rust-src
+      - name: install rust toolchain nightly
+        run: rustup toolchain add nightly
+
       # Rust tests
       - name: Build
         run: cargo build --verbose

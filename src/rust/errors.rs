@@ -21,6 +21,8 @@ pub enum RustError {
     ManifestPath(#[source] std::io::Error),
     #[error(transparent)]
     CargoConfig(#[from] CargoHomeError),
+    #[error(transparent)]
+    RustupToolchain(#[from] RustupToolchainError),
 }
 
 #[derive(Error, Debug)]
@@ -35,4 +37,12 @@ pub enum CargoHomeError {
     CargoConfigRead(PathBuf, TomlError),
     #[error("Cannot write updated cargo config to {0}: {1}")]
     CargoConfigWrite(PathBuf, std::io::Error),
+}
+
+#[derive(Error, Debug)]
+pub enum RustupToolchainError {
+    #[error(transparent)]
+    CommandFailed(#[from] Box<CommandFailedError>),
+    #[error("Cannot read toolchain directory at '{0}': {1}")]
+    ReadToolchainDirectory(PathBuf, #[source] std::io::Error),
 }

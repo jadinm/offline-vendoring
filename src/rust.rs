@@ -1,6 +1,7 @@
 use std::{
     fs::{self, copy},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use serde::{Deserialize, Serialize};
@@ -13,8 +14,8 @@ mod test;
 
 use crate::{
     ArchiveBuilder, CARGO_TOOLS_PATH, CARGO_VENDOR_PATH, InstallSkip,
-    cmd::CommandRunner,
-    rust::errors::{CargoHomeError, RustError},
+    cmd::{CommandFailedError, CommandRunner},
+    rust::errors::{CargoHomeError, RustError, RustupToolchainError},
 };
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -59,6 +60,7 @@ impl RustSettings {
             }
             args.push(out_folder.display().to_string());
             T::run_cmd(cmd, &args, None)?;
+            Self::package_std_deps::<T>(&out_folder)?;
         }
         tar.append_dir_all(CARGO_VENDOR_PATH, &out_folder)
             .map_err(|e| RustError::Archive {
@@ -66,6 +68,69 @@ impl RustSettings {
                 dst: CARGO_VENDOR_PATH.to_owned(),
                 source: e,
             })?;
+
+        Ok(())
+    }
+
+    fn package_std_deps<T: CommandRunner>(out_folder: &Path) -> Result<(), RustupToolchainError> {
+        // Get toolchain path from rustc
+        let mut cmd = Command::new("rustc");
+        cmd.args(&["--print".to_owned(), "sysroot".to_owned()]);
+
+        let output = cmd
+            .output()
+            .map_err(|e| Box::new(CommandFailedError::CommandStart(cmd, e)))?;
+        let toolchain_path = String::from_utf8_lossy(&output.stdout).replace(['\n', '\r'], "");
+        let toolchain_path = PathBuf::from(toolchain_path);
+
+        // Get rust-src component if absent
+        T::run_cmd(
+            "rustup",
+            &[
+                "component".to_owned(),
+                "add".to_owned(),
+                "rust-src".to_owned(),
+            ],
+            None,
+        )?;
+
+        // Get to the lengthy sub-path where the rust lib sources are
+        let toolchain_path = toolchain_path
+            .join("lib")
+            .join("rustlib")
+            .join("src")
+            .join("rust")
+            .join("library");
+
+        let lib_src_paths = fs::read_dir(&toolchain_path)
+            .map_err(|e| RustupToolchainError::ReadToolchainDirectory(toolchain_path, e))?;
+        // Vendor rust library crate dependencies (e.g., std)
+        for src in lib_src_paths.filter_map(Result::ok) {
+            let file_name = src.file_name().to_string_lossy().to_string();
+            if file_name == "backtrace" || file_name.contains("rustc-std-workspace-") {
+                continue;
+            }
+            let src = src.path().join("Cargo.toml");
+            if src.exists() {
+                info!("Vendoring {}", src.display());
+                T::run_cmd(
+                    "cargo",
+                    &[
+                        // Nightly version required because std crate use public deps
+                        // which is an unstable feature.
+                        "+nightly".to_owned(),
+                        "vendor".to_owned(),
+                        "--versioned-dirs".to_owned(),
+                        "--respect-source-config".to_owned(),
+                        "--no-delete".to_owned(),
+                        "--sync".to_owned(),
+                        src.display().to_string(),
+                        out_folder.display().to_string(),
+                    ],
+                    None,
+                )?;
+            }
+        }
 
         Ok(())
     }

@@ -6,9 +6,11 @@ The following resources can be packaged:
 
 1. Rust tools (e.g., cargo-audit)
 2. Rust crates
-3. Python packages (e.g., pre-commit)
-4. Git repositories (e.g., a pre-commit hook repository or the rustsec/advisory-db for cargo-audit to work offline)
-5. List of arbitrary paths along with a customizable install command (e.g., a list of vscode extensions)
+3. Rust crates to compile std for the current toolchain
+   to run rust-analyzer on the offline machine.
+4. Python packages (e.g., pre-commit)
+5. Git repositories (e.g., a pre-commit hook repository or the rustsec/advisory-db for cargo-audit to work offline)
+6. List of arbitrary paths along with a customizable install command (e.g., a list of vscode extensions)
 
 We expect python, pip, rust, and git to be already installed in the offline machine.
 
@@ -41,6 +43,9 @@ binary from the online machine to the offline machine.
 
 - A python setup with pip on both online and offline machines.
 - A rust setup on both online and offline machines.
+  Both machines need to share the same toolchain.
+- The online machine needs the nightly chain to build dependencies of std.
+  The rust std uses public dependencies which is an unstable feature.
 - Git for git mirrors on both online and offline machines.
 - [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) to download rust tools faster on the online machine.
 
