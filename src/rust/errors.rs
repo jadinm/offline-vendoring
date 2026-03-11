@@ -17,6 +17,8 @@ pub enum RustError {
     CommandFailed(#[from] Box<CommandFailedError>),
     #[error("Cannot create rust sub-directory at '{0}': {1}")]
     CreateMainDirectory(PathBuf, #[source] std::io::Error),
+    #[error("Unable to find manifest {0}")]
+    ManifestPath(#[source] std::io::Error),
     #[error(transparent)]
     CargoConfig(#[from] CargoHomeError),
 }

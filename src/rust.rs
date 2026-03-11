@@ -51,6 +51,9 @@ impl RustSettings {
                 "--respect-source-config".to_owned(),
             ];
             for manifest in &self.manifests {
+                // If the current directory is a workspace, using relative paths makes cargo fail:
+                // It checks whether any relative path is part of the workspace and only allow it if it does.
+                let manifest = manifest.canonicalize().map_err(RustError::ManifestPath)?;
                 args.push("--sync".to_owned());
                 args.push(manifest.display().to_string());
             }
