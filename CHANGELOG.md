@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Relative paths to cargo manifests when there is a rust workspace in the current directory (#5)
+
 ## [1.0.1] - 2019-02-18
 
 ### Fixed
