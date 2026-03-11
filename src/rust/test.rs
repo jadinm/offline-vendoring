@@ -1,5 +1,6 @@
 use std::fs::{self, File, create_dir_all};
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use assertables::assert_fs_read_to_string_eq_x;
@@ -28,25 +29,67 @@ fn package_crates(mut archive: ArchiveBuilder) {
     let ctx = MockCommandRunner::run_cmd_context();
     let out_folder = tempdir().unwrap();
     let crate_folder = out_folder.path().join(CARGO_VENDOR_PATH);
-    let crate_folder_clone = crate_folder.clone();
     ctx.expect()
         .with(
             eq("cargo"),
-            function(move |args: &[String]| {
-                args.ends_with(&[
-                    "--sync".to_owned(),
-                    "./Cargo.toml".to_owned(),
-                    crate_folder.display().to_string(),
-                ])
+            function({
+                let crate_folder = crate_folder.clone();
+                move |args: &[String]| {
+                    args.ends_with(&[
+                        "--sync".to_owned(),
+                        PathBuf::from("./Cargo.toml")
+                            .canonicalize()
+                            .unwrap()
+                            .display()
+                            .to_string(),
+                        crate_folder.display().to_string(),
+                    ])
+                }
             }),
             eq(None),
         )
         .times(1)
-        .returning(move |_, _, _| {
-            // cargo vendor creates the folder and it's expected by our tested code
-            fs::create_dir_all(&crate_folder_clone).unwrap();
-            Ok(())
+        .returning({
+            let crate_folder = crate_folder.clone();
+            move |_, _, _| {
+                // cargo vendor creates the folder and it's expected by our tested code
+                fs::create_dir_all(&crate_folder).unwrap();
+                Ok(())
+            }
         });
+    ctx.expect()
+        .with(
+            eq("rustup"),
+            eq([
+                "component".to_owned(),
+                "add".to_owned(),
+                "rust-src".to_owned(),
+            ]),
+            eq(None),
+        )
+        .times(1)
+        .returning(|_, _, _| Ok(()));
+    ctx.expect()
+        .with(
+            eq("cargo"),
+            function({
+                let crate_folder = crate_folder.clone();
+                move |args: &[String]| {
+                    args.starts_with(&[
+                        "+nightly".to_owned(),
+                        "vendor".to_owned(),
+                        "--versioned-dirs".to_owned(),
+                        "--respect-source-config".to_owned(),
+                        "--no-delete".to_owned(),
+                        "--sync".to_owned(),
+                    ]) && args.ends_with(&[crate_folder.display().to_string()])
+                }
+            }),
+            eq(None),
+        )
+        // at least vendoring core, alloc & std deps
+        .times(3..)
+        .returning(|_, _, _| Ok(()));
 
     let rust: RustSettings = serde_yaml::from_str(
         "
