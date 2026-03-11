@@ -36,8 +36,16 @@ jobs:
       # Run program on self
       - name: Test offline-package on self
         run: cargo run --bin cargo-offline-package offline-package example_settings
+        env:
+          RUST_LOG: debug
       - name: Test offline-install on self (skipping custom & git steps)
         run: |
-          mkdir tmp
-          cd tmp
-          cargo run --manifest-path ../Cargo.toml --bin cargo-offline-install -- offline-install --skip git-push --skip custom ../offline-vendoring.tar.gz
+          # Block pypi & crates.io
+          bash .github/scripts/block_online_resources.sh
+
+          # "Offline" install
+          (mkdir tmp && cd tmp && cargo run --manifest-path ../Cargo.toml --bin cargo-offline-install -- offline-install --skip git-push --skip custom ../offline-vendoring.tar.gz)
+
+          bash .github/scripts/validate_offline_install.sh
+        env:
+          RUST_LOG: debug
