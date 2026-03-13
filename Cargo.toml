@@ -1,23 +1,23 @@
 [package]
 authors = ["Mathieu Jadin <mathjadin@gmail.com>"]
+categories = [
+  "command-line-utilities",
+  "development-tools::cargo-plugins",
+]
+description = "package and install different external resources for offline install in air-gaped environments"
 edition = "2024"
+keywords = [
+  "cargo",
+  "cargo-subcommand",
+  "cli",
+  "vendoring",
+  "offline",
+]
 license = "MIT"
 name = "cargo_offline_vendoring"
-version = "1.0.1"
-description = "package and install different external resources for offline install in air-gaped environments"
 repository = "https://github.com/jadinm/offline-vendoring"
-categories = [
-    "command-line-utilities",
-    "development-tools::cargo-plugins",
-]
-keywords = [
-    "cargo",
-    "cargo-subcommand",
-    "cli",
-    "vendoring",
-    "offline",
-]
 rust-version = "1.88"
+version = "1.0.1"
 
 [dependencies]
 clap = {version = "4", features = ["derive"]}
@@ -67,12 +67,13 @@ cargo = {level = "warn", priority = -1}
 pedantic = {level = "warn", priority = -1}
 # restrictive lints are kept in allow level by default
 
-# Allow the following cargo lints
+## Allow the following cargo lints
 cargo_common_metadata = "allow"
-multiple_crate_versions = "allow" # Unless this is a MCU project, reducing binary size has little interest
-# Allow the following pedantic lints
-# Warn on the following restriction lints (checked for 1.93.0)
-# https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html?groups=restriction
+# Unless this is a MCU project, reducing binary size has little interest
+multiple_crate_versions = "allow"
+## Allow the following pedantic lints
+## Warn on the following restriction lints (checked for 1.93.0)
+## https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html?groups=restriction
 alloc_instead_of_core = "warn"
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
@@ -99,7 +100,8 @@ indexing_slicing = "warn"
 infinite_loop = "warn"
 large_include_file = "warn"
 lossy_float_literal = "warn"
-map_with_unused_argument_over_ranges = "warn" # Might be legit if the Map<> type is required for the next calls
+# Might be legit if the Map<> type is required for the next calls
+map_with_unused_argument_over_ranges = "warn"
 mem_forget = "warn"
 min_ident_chars = "warn"
 missing_assert_message = "warn"
