@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-13
+
 ### Fixed
 
 - Relative paths to cargo manifests when there is a rust workspace in the current directory (#5)
@@ -18,13 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Perhaps in the future, cargo vendor will perform this task for us but,
   for now, it needs to be manual.
 
-## [1.0.1] - 2019-02-18
+## [1.0.1] - 2026-02-18
 
 ### Fixed
 
 - When the CLI parameter to configure pip only on site-level now install no-index option only for the site and not for the user (#3)
 
-## [1.0.0] - 2019-02-15
+## [1.0.0] - 2026-02-15
 
 ### Added
 
