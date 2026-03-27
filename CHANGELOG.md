@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix two tar crate CVEs but upgrading its version
+
+  ```text
+  Crate:     tar
+  Version:   0.4.44
+  Title:     `unpack_in` can chmod arbitrary directories by following symlinks
+  Date:      2026-03-19
+  ID:        RUSTSEC-2026-0067
+  URL:       https://rustsec.org/advisories/RUSTSEC-2026-0067
+  Severity:  5.1 (medium)
+  Solution:  Upgrade to >=0.4.45
+  Dependency tree:
+  tar 0.4.44
+  └── cargo_offline_vendoring 1.0.1
+  ```
+
+  ```text
+  Crate:     tar
+  Version:   0.4.44
+  Title:     tar-rs incorrectly ignores PAX size headers if header size is nonzero
+  Date:      2026-03-19
+  ID:        RUSTSEC-2026-0068
+  URL:       https://rustsec.org/advisories/RUSTSEC-2026-0068
+  Severity:  5.1 (medium)
+  Solution:  Upgrade to >=0.4.45
+  ```
+
 ## [1.1.0] - 2026-03-13
 
 ### Fixed
