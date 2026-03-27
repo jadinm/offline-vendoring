@@ -17,7 +17,7 @@ license = "MIT"
 name = "cargo_offline_vendoring"
 repository = "https://github.com/jadinm/offline-vendoring"
 rust-version = "1.88"
-version = "1.1.0"
+version = "1.1.1"
 
 [dependencies]
 clap = {version = "4", features = ["derive"]}
