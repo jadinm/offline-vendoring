@@ -55,14 +55,14 @@ path = "src/bin/package.rs"
 name = "cargo-offline-install"
 path = "src/bin/install.rs"
 
-[lints.rust]
+[workspace.lints.rust]
 ambiguous_negative_literals = "deny" # Check for cases that are confusing between a negative literal and a negation that's not part of the literal.
 arithmetic_overflow = "deny" # Prevent operations that would cause integer overflow.
 let_underscore_drop = "deny" # Check for statements which don't bind an expression which has a non-trivial Drop implementation to anything
 unnecessary_transmutes = "deny" # Prevent unsafe & unnecessary transmutation.
 #                                         causing the expression to be dropped immediately instead of at end of scope.
 
-[lints.clippy]
+[workspace.lints.clippy]
 cargo = {level = "warn", priority = -1}
 pedantic = {level = "warn", priority = -1}
 # restrictive lints are kept in allow level by default
