@@ -290,11 +290,7 @@ fn install(
                 "_DIRECTORY_",
                 &format!(
                     "{quote}{}{quote}",
-                    &in_folder
-                        .path()
-                        .join(CARGO_VENDOR_PATH)
-                        .display()
-                        .to_string()
+                    in_folder.path().join(CARGO_VENDOR_PATH).display()
                 ),
             );
             assert_fs_read_to_string_eq_x!(
