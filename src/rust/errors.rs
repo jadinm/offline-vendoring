@@ -43,6 +43,8 @@ pub enum CargoHomeError {
 pub enum RustupToolchainError {
     #[error(transparent)]
     CommandFailed(#[from] Box<CommandFailedError>),
-    #[error("Cannot read toolchain directory at '{0}': {1}")]
+    #[error("Cannot read toolchain vendor directory at '{0}': {1}")]
     ReadToolchainDirectory(PathBuf, #[source] std::io::Error),
+    #[error("Cannot copy toolchain vendor directory from '{0}' to '{1}': {2}")]
+    CopyToolchainDirectory(PathBuf, PathBuf, #[source] fs_extra::error::Error),
 }

@@ -24,7 +24,7 @@ pub enum PackagingError {
     #[error("Python: {0}")]
     Python(#[from] PythonError),
     #[error("Rust: {0}")]
-    Rust(#[from] RustError),
+    Rust(#[from] Box<RustError>),
 }
 
 #[derive(Error, Debug)]
@@ -48,5 +48,5 @@ pub enum InstallingError {
     #[error("Python: {0}")]
     Python(#[from] PythonError),
     #[error("Rust: {0}")]
-    Rust(#[from] RustError),
+    Rust(#[from] Box<RustError>),
 }
