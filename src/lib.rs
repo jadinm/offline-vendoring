@@ -201,7 +201,7 @@ fn install_inner<T: CommandRunner>(
     // Install resources
     info!("Installing external resources");
     let mut latest_error: Result<(), _> = Ok(());
-    let res_rs = RustSettings::install(unpacked_directory.as_path(), rust_config_for, skip);
+    let res_rs = RustSettings::install::<T>(unpacked_directory.as_path(), rust_config_for, skip);
     if let Err(ref err) = res_rs {
         error!("Failed to install rust deps: {err}");
         latest_error = res_rs.map_err(InstallingError::Rust);

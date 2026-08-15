@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use assertables::assert_fs_read_to_string_eq_x;
+use assertables::{assert_fs_read_to_string_eq_x, assert_in, assert_len_ge_x};
 use mockall::predicate::{eq, function};
 use rstest::rstest;
 use tempfile::tempdir;
@@ -57,39 +57,6 @@ fn package_crates(mut archive: ArchiveBuilder) {
                 Ok(())
             }
         });
-    ctx.expect()
-        .with(
-            eq("rustup"),
-            eq([
-                "component".to_owned(),
-                "add".to_owned(),
-                "rust-src".to_owned(),
-            ]),
-            eq(None),
-        )
-        .times(1)
-        .returning(|_, _, _| Ok(()));
-    ctx.expect()
-        .with(
-            eq("cargo"),
-            function({
-                let crate_folder = crate_folder.clone();
-                move |args: &[String]| {
-                    args.starts_with(&[
-                        "+nightly".to_owned(),
-                        "vendor".to_owned(),
-                        "--versioned-dirs".to_owned(),
-                        "--respect-source-config".to_owned(),
-                        "--no-delete".to_owned(),
-                        "--sync".to_owned(),
-                    ]) && args.ends_with(&[crate_folder.display().to_string()])
-                }
-            }),
-            eq(None),
-        )
-        // at least vendoring core, alloc & std deps
-        .times(3..)
-        .returning(|_, _, _| Ok(()));
 
     let rust: RustSettings = serde_yaml::from_str(
         "
@@ -247,7 +214,22 @@ fn install(
 ) {
     // set_var is only safe to call in single-threaded environment, so we need a lock
     let _m = MTX.lock();
+    let ctx = MockCommandRunner::run_cmd_context();
     let out_folder = tempdir().unwrap();
+
+    ctx.expect()
+        .with(
+            eq("rustup"),
+            eq([
+                "component".to_owned(),
+                "add".to_owned(),
+                "rust-src".to_owned(),
+            ]),
+            eq(None),
+        )
+        .times(1)
+        .returning(|_, _, _| Ok(()));
+
     temp_env::with_var(
         "CARGO_HOME",
         Some(out_folder.path().display().to_string()),
@@ -277,8 +259,13 @@ fn install(
                 File::create(tool_path).unwrap();
             }
 
+            // Create empty vendor folder, expected to be filled by std dependencies
+            let vendor_out_path = in_folder.path().join(CARGO_VENDOR_PATH);
+            create_dir_all(&vendor_out_path).unwrap();
+
             // Actual tested operation
-            RustSettings::install(in_folder.path(), None, &[]).expect("Installation failed");
+            RustSettings::install::<MockCommandRunner>(in_folder.path(), None, &[])
+                .expect("Installation failed");
 
             // Both OS have different way of quoting paths
             #[cfg(target_os = "linux")]
@@ -306,6 +293,34 @@ fn install(
                     "", // Empty files
                     "The file should exist with the same content, that is, an empty string"
                 );
+            }
+
+            // Check that there dependencies were vendored.
+            let vendored_deps: Vec<String> = fs::read_dir(&vendor_out_path)
+                .unwrap()
+                .collect::<std::io::Result<Vec<_>>>()
+                .unwrap()
+                .iter()
+                .map(|entry| {
+                    entry
+                        .file_name()
+                        .to_str()
+                        .unwrap()
+                        // The vendored dependencies are in the form of `libc-0.2.162` and we want to extract the base name, that is, `libc`
+                        .split("-")
+                        .next()
+                        .unwrap()
+                        .to_string()
+                })
+                .collect();
+
+            assert_len_ge_x!(
+                &vendored_deps,
+                3,
+                "There should be at least 3 vendored dependencies"
+            );
+            for lib_base in &["libc", "cc", "rand"] {
+                assert_in!(lib_base.to_string(), &vendored_deps);
             }
         },
     );

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- rust-src archives now include std external dependencies.
+  Older rust versions were also updated to support it.
+  So, there is no need to vendor them anymore, only to install them along with the other vendored dependencies.
+
 ## [1.1.1] - 2026-03-27
 
 ### Fixed

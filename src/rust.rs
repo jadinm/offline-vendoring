@@ -1,9 +1,10 @@
 use std::{
-    fs::{self, copy},
+    fs::{self, DirEntry, ReadDir, copy},
     path::{Path, PathBuf},
     process::Command,
 };
 
+use fs_extra::dir::{self, CopyOptions};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table, value};
 use tracing::{debug, info};
@@ -60,7 +61,6 @@ impl RustSettings {
             }
             args.push(out_folder.display().to_string());
             T::run_cmd(cmd, &args, None)?;
-            Self::package_std_deps::<T>(&out_folder)?;
         }
         tar.append_dir_all(CARGO_VENDOR_PATH, &out_folder)
             .map_err(|e| RustError::Archive {
@@ -68,69 +68,6 @@ impl RustSettings {
                 dst: CARGO_VENDOR_PATH.to_owned(),
                 source: e,
             })?;
-
-        Ok(())
-    }
-
-    fn package_std_deps<T: CommandRunner>(out_folder: &Path) -> Result<(), RustupToolchainError> {
-        // Get toolchain path from rustc
-        let mut cmd = Command::new("rustc");
-        cmd.args(&["--print".to_owned(), "sysroot".to_owned()]);
-
-        let output = cmd
-            .output()
-            .map_err(|e| Box::new(CommandFailedError::CommandStart(cmd, e)))?;
-        let toolchain_path = String::from_utf8_lossy(&output.stdout).replace(['\n', '\r'], "");
-        let toolchain_path = PathBuf::from(toolchain_path);
-
-        // Get rust-src component if absent
-        T::run_cmd(
-            "rustup",
-            &[
-                "component".to_owned(),
-                "add".to_owned(),
-                "rust-src".to_owned(),
-            ],
-            None,
-        )?;
-
-        // Get to the lengthy sub-path where the rust lib sources are
-        let toolchain_path = toolchain_path
-            .join("lib")
-            .join("rustlib")
-            .join("src")
-            .join("rust")
-            .join("library");
-
-        let lib_src_paths = fs::read_dir(&toolchain_path)
-            .map_err(|e| RustupToolchainError::ReadToolchainDirectory(toolchain_path, e))?;
-        // Vendor rust library crate dependencies (e.g., std)
-        for src in lib_src_paths.filter_map(Result::ok) {
-            let file_name = src.file_name().to_string_lossy().to_string();
-            if file_name == "backtrace" || file_name.contains("rustc-std-workspace-") {
-                continue;
-            }
-            let src = src.path().join("Cargo.toml");
-            if src.exists() {
-                info!("Vendoring {}", src.display());
-                T::run_cmd(
-                    "cargo",
-                    &[
-                        // Nightly version required because std crate use public deps
-                        // which is an unstable feature.
-                        "+nightly".to_owned(),
-                        "vendor".to_owned(),
-                        "--versioned-dirs".to_owned(),
-                        "--respect-source-config".to_owned(),
-                        "--no-delete".to_owned(),
-                        "--sync".to_owned(),
-                        src.display().to_string(),
-                        out_folder.display().to_string(),
-                    ],
-                    None,
-                )?;
-            }
-        }
 
         Ok(())
     }
@@ -187,21 +124,25 @@ impl RustSettings {
         out_folder: &Path,
         tar: &mut ArchiveBuilder,
         skip_download: bool,
-    ) -> Result<(), RustError> {
+    ) -> Result<(), Box<RustError>> {
         self.package_crates::<T>(out_folder, tar, skip_download)?;
-        self.package_tools::<T>(out_folder, tar, skip_download)
+        Ok(self.package_tools::<T>(out_folder, tar, skip_download)?)
     }
 
     /// `in_folder` needs to be a canonicalized path
-    pub(crate) fn install(
+    pub(crate) fn install<T: CommandRunner>(
         in_folder: &Path,
         rust_config_for: Option<&PathBuf>,
         skip: &[InstallSkip],
-    ) -> Result<(), RustError> {
+    ) -> Result<(), Box<RustError>> {
+        info!("Installing vendored std deps");
+        let vendor_folder = in_folder.join(CARGO_VENDOR_PATH);
+        Self::install_std_deps::<T>(vendor_folder.as_path()).map_err(RustError::RustupToolchain)?;
+
         let cargo_home = PathBuf::from(
             std::env::var("CARGO_HOME")
                 .or(std::env::var("HOME").map(|home| format!("{home}/.cargo")))
-                .map_err(CargoHomeError::NoCargoHome)?,
+                .map_err(|e| RustError::CargoConfig(CargoHomeError::NoCargoHome(e)))?,
         );
 
         // Potentially restrict the cargo configuration to a given path, instead of the whole user.
@@ -232,8 +173,9 @@ impl RustSettings {
             return Ok(());
         }
 
-        let tools_paths = fs::read_dir(&tools_in_folder)
-            .map_err(|e| CargoHomeError::ReadToolsDirectory(tools_in_folder, e))?;
+        let tools_paths: ReadDir = fs::read_dir(&tools_in_folder).map_err(|e| {
+            RustError::CargoConfig(CargoHomeError::ReadToolsDirectory(tools_in_folder, e))
+        })?;
         // Copy rust tools binary
         for src in tools_paths.filter_map(Result::ok) {
             info!("Installing {}", src.path().display());
@@ -251,9 +193,77 @@ impl RustSettings {
 
             let base_name = src.file_name().display().to_string();
             let dst_path = cargo_home.join("bin").join(base_name);
-            copy(src.path(), &dst_path)
-                .map_err(|e| CargoHomeError::ImportTool(src.path(), dst_path, e))?;
+            copy(src.path(), &dst_path).map_err(|e| {
+                RustError::CargoConfig(CargoHomeError::ImportTool(src.path(), dst_path, e))
+            })?;
         }
+        Ok(())
+    }
+
+    fn install_std_deps<T: CommandRunner>(out_folder: &Path) -> Result<(), RustupToolchainError> {
+        // Get toolchain path from rustc
+        let mut cmd = Command::new("rustc");
+        cmd.args(&["--print".to_owned(), "sysroot".to_owned()]);
+
+        let output = cmd
+            .output()
+            .map_err(|e| Box::new(CommandFailedError::CommandStart(cmd, e)))?;
+        let toolchain_path = String::from_utf8_lossy(&output.stdout).replace(['\n', '\r'], "");
+        let toolchain_path = PathBuf::from(toolchain_path);
+
+        // Get rust-src component if absent
+        T::run_cmd(
+            "rustup",
+            &[
+                "component".to_owned(),
+                "add".to_owned(),
+                "rust-src".to_owned(),
+            ],
+            None,
+        )?;
+
+        // Get to the lengthy sub-path where the vendored deps of the rust lib sources are
+        let toolchain_vendor_path = toolchain_path
+            .join("lib")
+            .join("rustlib")
+            .join("src")
+            .join("rust")
+            .join("library")
+            .join("vendor");
+        debug!("Toolchain path is {}", toolchain_vendor_path.display());
+
+        let lib_src_paths = fs::read_dir(&toolchain_vendor_path)
+            .map_err(|e| {
+                RustupToolchainError::ReadToolchainDirectory(toolchain_vendor_path.clone(), e)
+            })?
+            .collect::<Result<Vec<DirEntry>, std::io::Error>>()
+            .map_err(|e| {
+                RustupToolchainError::ReadToolchainDirectory(toolchain_vendor_path.clone(), e)
+            })?;
+
+        // Copy all vendored dependencies
+        let mut options = CopyOptions::new();
+        options.copy_inside = true;
+        // Might happen if the project has the same dependency as rust std
+        options.skip_exist = true;
+        for src in &lib_src_paths {
+            let src = src.path();
+            if src.exists() && src.is_dir() {
+                info!(
+                    "Copy vendored {} to {}",
+                    src.display(),
+                    out_folder.display()
+                );
+                dir::copy(&src, out_folder, &options).map_err(|e| {
+                    RustupToolchainError::CopyToolchainDirectory(
+                        src.clone(),
+                        out_folder.to_path_buf(),
+                        e,
+                    )
+                })?;
+            }
+        }
+
         Ok(())
     }
 

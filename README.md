@@ -43,9 +43,8 @@ binary from the online machine to the offline machine.
 
 - A python setup with pip on both online and offline machines.
 - A rust setup on both online and offline machines.
-  Both machines need to share the same toolchain.
-- The online machine needs the nightly chain to build dependencies of std.
-  The rust std uses public dependencies which is an unstable feature.
+  The offline machine needs rust-src component installed.
+  This component vendors its own dependencies for rust-analyzer to work offline.
 - Git for git mirrors on both online and offline machines.
 - [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) to download rust tools faster on the online machine.
 
